@@ -3,12 +3,12 @@ name: Deploy to PROD
 on:
   push:
     branches:
-      - deployment
+      - master
 
 jobs:
   deploy-prod:
     name: Deploy to Prod
-    uses: bitscard/strapi/.github/workflows/deploy.yml@deployment
+    uses: bitscard/strapi/.github/workflows/deploy.yml@master
     with:
       envName: test
     secrets:
