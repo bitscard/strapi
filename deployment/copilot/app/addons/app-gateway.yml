@@ -1,0 +1,78 @@
+Parameters:
+  App:
+    Type: String
+    Description: Your application's name.
+  Env:
+    Type: String
+    Description: The environment name your service, job, or workflow is being deployed to.
+  Name:
+    Type: String
+    Description: The name of the service, job, or workflow being deployed.
+Mappings:
+  Environments:
+    test:
+      "host": "strapi.test1.uk.getbits.app"
+    dev:
+      "host": "strapi.uk.dev.getbits.app"
+    prod:
+      "host": "strapi.uk.getbits.app"
+Resources:
+  APIGatewayHTTP:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: alb-HTTP-api
+      Description: HTTP API ALB
+      ProtocolType: HTTP
+
+  APIGatewayHTTPRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref APIGatewayHTTP
+      RouteKey: 'ANY /{proxy+}'
+      Target: !Join
+        - /
+        - - integrations
+          - !Ref APIGatewayHTTPIntegration
+
+  APIGatewayHTTPIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref APIGatewayHTTP
+      Description: Private ALB Integration
+      IntegrationType: HTTP_PROXY
+      IntegrationMethod: ANY
+#      ConnectionType: VPC_LINK
+      IntegrationUri:
+        Fn::Join:
+          - ''
+          - - 'http://'
+            - Fn::ImportValue: !Sub ${App}-${Env}-PublicLoadBalancerDNS
+            - '/{proxy}'
+#      IntegrationUri: Fn:ImportValue !Sub ${App}-${Env}-HTTPListenerArn
+      # @todo hack to define host header for ALB. Otherwise every redirect in app will use ALB public host.
+      # Remove it after moving ALB to private network
+      RequestParameters:
+        'overwrite:header.host':
+            Fn::Sub:
+              - "${host}"
+              - host:
+                  Fn::FindInMap:
+                    - 'Environments'
+                    - Ref: 'Env'
+                    - 'host'
+
+
+      PayloadFormatVersion: '1.0'
+
+  APIStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: $default
+      AutoDeploy: true
+      ApiId: !Ref APIGatewayHTTP
+
+
+Outputs:
+  APIGatewayHTTPEndpoint:
+    Description: HTTP API ALB
+    Value: !GetAtt APIGatewayHTTP.ApiEndpoint
